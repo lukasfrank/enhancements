@@ -31,6 +31,7 @@ reviewers:
     - [Target Model: Topology-Scoped Provisioning](#target-model-topology-scoped-provisioning)
     - [API Changes](#api-changes)
     - [Access Resolution via a Storage Plugin](#access-resolution-via-a-storage-plugin)
+    - [Migration Path](#migration-path)
 - [Alternatives](#alternatives)
 
 ## Summary
@@ -126,15 +127,15 @@ status:
 
 The `volumepoollet` for zone `a` matches the topology, provisions the volume via
 the `<ceph,*>-provider`, and writes back the opaque `status.volumeID` and
-`state`. `volumeClassRef` + `resources` + `topology` are the complete placement
-input.
+`state`. `volumeClassRef` + `resources` + `topologyConstraints` are the complete
+placement input.
 
 ### API Changes
 
 * Remove the `VolumePool` and `BucketPool` kinds.
 * On `Volume` and `Bucket`: drop pool selection (pool ref, pool selector,
-  tolerations) and add a `topology` constraint expressing where the resource
-  should live.
+  tolerations) and add a `topologyConstraints` selector expressing where the
+  resource may live.
 * A `Volume` no longer exposes access credentials in its status; a `Bucket` still
   exposes its endpoint and credentials, since the tenant's application consumes it
   directly.
@@ -158,9 +159,34 @@ migrate stay available through managed primitives (`VolumeSnapshot`,
 `spec.dataSource`).
 
 
+### Migration Path
+
+The change is breaking, so it rolls out in two phases: first add everything and
+support the old and new models side by side, then remove the old one once
+nothing depends on it.
+
+**Phase 1: Add new fields, support both**
+
+* Add `topologyConstraints` to `Volume` / `Bucket`. The poollet reconciles a
+  resource if its `volumePoolRef` matches its pool name. Pool fields are
+  deprecated.
+* Add the consumer storage plugin so volumes can be resolved by handle, alongside
+  the existing credential-passing path.
+* Switch producers (ephemeral volumes, …) to set `topologyConstraints`
+* Backfill existing `Volume`s / `Bucket`s from their bound pool's topology labels
+
+**Phase 2: Remove the old path**
+
+* Remove deprecated fields, the `VolumePool` / `BucketPool` kinds, 
+  the storage scheduler and the pool-announce logic. Topology becomes the sole reconciliation key.
+* Stop exposing volume access credentials (`Volume.status.access` and the IRI
+  secret data); consumers resolve solely via the plugin. `Bucket.status.access`
+  is unchanged. 
+* Patch `VolumeID` to the new scheme and update `ceph-provider` to stamp new ids 
+
 ## Alternatives
 
-* **Single `{key, value}` topology struct.** Simpler, but cannot pin region *and*
-  zone; the map generalizes cleanly while staying readable for the common case.
+* **Flat topology map or single `{key, value}`.** Simpler, but expresses only
+  exact matches.
 * **Do nothing.** Retains a scheduler and two kinds whose only job is an
   indirection that is at best redundant and at worst races with compute.
