@@ -101,7 +101,6 @@ resources against it. For storage this indirection buys little:
 A `Volume` declares *what* it needs and *where* it should live; there is no pool
 object and no scheduler:
 
-[//]: # (@formatter:off)
 ```yaml
 apiVersion: storage.ironcore.dev/v1alpha1
 kind: Volume
@@ -112,8 +111,13 @@ spec:
     name: fast
   resources:
     storage: 10Gi
-  topology:                          # constraint the provider must satisfy
-    topology.ironcore.dev/zone: a
+  topologyConstraints:          # constraint the provider must satisfy                
+    matchLabels: # single zone
+      topology.ironcore.dev/zone: a     
+    matchExpressions:  # multi-zone
+      - key: topology.ironcore.dev/zone
+        operator: In
+        values: [a, c] 
 status:
   volumeID: <opaque-provider-handle>   # "where to find it"; resolved by the consumer plugin
   state: Available
