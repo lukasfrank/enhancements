@@ -112,7 +112,7 @@ spec:
     name: fast
   resources:
     storage: 10Gi
-  topologyConstraints:          # constraint the provider must satisfy                
+  topologyConstraints:          # constraint the provider must satisfy (optional)           
     matchLabels: # single zone
       topology.ironcore.dev/zone: a     
     matchExpressions:  # multi-zone
